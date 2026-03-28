@@ -38,26 +38,30 @@ function printLabels(selectedItems,projects){
       category:item.category,project:proj?.name||"",qr:item.qrCode||item.id};
   }));
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Етикетки</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
 <style>
 @page{size:80mm 50mm landscape;margin:2mm;}
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Source Sans 3',Arial,sans-serif;}
 .label{width:76mm;height:46mm;border:0.5pt solid #ccc;padding:2mm;page-break-after:always;display:flex;gap:2mm;align-items:center;}
 .label:last-child{page-break-after:auto;}
 .qr{flex:0 0 26mm;height:26mm;}
-.qr canvas,.qr img{width:26mm!important;height:26mm!important;}
+.qr svg{width:26mm;height:26mm;}
 .info{flex:1;display:flex;flex-direction:column;justify-content:center;overflow:hidden;}
 .name{font-size:9pt;font-weight:800;line-height:1.2;margin-bottom:1mm;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
 .row{font-size:7pt;color:#333;margin-bottom:0.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .inv{font-size:8pt;font-weight:700;font-family:monospace;margin-bottom:1mm;}
 .project{font-size:7pt;font-weight:700;color:#2e75b6;margin-bottom:0.5mm;}
 @media print{body{margin:0;}}
-</style></head><body>
+</style>
+<script>
+// Minimal QR encoder that outputs SVG — based on nayuki/QR-Code-generator (MIT)
+var QrCode=(function(){"use strict";function qrcodegen(data,ecl){var ECC=[1,0,3,2];var ec=ECC[ecl||0];var version=0;for(var v=1;v<=40;v++){var cap=[0,26,44,70,100,134,172,196,242,292,346,404,466,532,581,655,733,815,901,991,1085,1156,1258,1364,1474,1588,1706,1828,1921,2051,2185,2323,2465,2611,2761,2876,3034,3196,3362,3532][v];if(data.length<=Math.floor(cap*[0.07,0.04,0.03,0.02][ec])){version=v;break;}}if(version===0)version=40;var size=version*4+17;var grid=[];for(var i=0;i<size;i++){grid[i]=[];for(var j=0;j<size;j++)grid[i][j]=null;}function set(x,y,v){if(x>=0&&x<size&&y>=0&&y<size)grid[y][x]=v?1:0;}function get(x,y){return(x>=0&&x<size&&y>=0&&y<size)?grid[y][x]:null;}function finder(cx,cy){for(var dy=-3;dy<=3;dy++)for(var dx=-3;dx<=3;dx++){var d=Math.max(Math.abs(dx),Math.abs(dy));set(cx+dx,cy+dy,d!==2&&d!==4);}for(var dy=-4;dy<=4;dy++)for(var dx=-4;dx<=4;dx++){if(Math.max(Math.abs(dx),Math.abs(dy))===4)set(cx+dx,cy+dy,false);}}finder(3,3);finder(size-4,3);finder(3,size-4);for(var i=8;i<size-8;i++){set(i,6,i%2===0);set(6,i,i%2===0);}if(version>=2){var aligns=[];var step=version===2?0:Math.floor(version*4/(Math.floor(version/7)+1)/2)*2;if(step===0)step=version*4;var positions=[6];for(var p=size-7;p>6;p-=step)positions.unshift(p);positions.forEach(function(py){positions.forEach(function(px){if(get(px,py)!==null)return;for(var dy=-2;dy<=2;dy++)for(var dx=-2;dx<=2;dx++)set(px+dx,py+dy,Math.max(Math.abs(dx),Math.abs(dy))!==1);});});}set(8,size-8,true);var bits=[];for(var i=0;i<data.length;i++)bits.push(data.charCodeAt(i));var encoded=[0x40|(bits.length>>4)&0xf,(bits.length&0xf)<<4];for(var i=0;i<bits.length;i++){encoded[encoded.length-1]|=(bits[i]>>4)&0xf;encoded.push((bits[i]&0xf)<<4);}var dcap=getDataCapacity(version,ec);while(encoded.length<dcap){encoded.push(0xEC);if(encoded.length<dcap)encoded.push(0x11);}var ecWords=getECWords(version,ec);var rs=reedSolomon(encoded.slice(0,dcap),ecWords);var allData=encoded.slice(0,dcap).concat(rs);var bitIdx=0,byteIdx=0;for(var right=size-1;right>=1;right-=2){if(right===6)right=5;for(var vert=0;vert<size;vert++){for(var j=0;j<2;j++){var x=right-j;var upward=((right+1)&2)===0;var y=upward?size-1-vert:vert;if(get(x,y)!==null)continue;var bit=false;if(byteIdx<allData.length)bit=((allData[byteIdx]>>(7-bitIdx))&1)===1;var mask=(x+y)%2===0;set(x,y,bit!==mask);bitIdx++;if(bitIdx>=8){bitIdx=0;byteIdx++;}}}}for(var i=0;i<15;i++){var fmtBits=getFormatBits(ec,0);var b=((fmtBits>>i)&1)===1;if(i<6)set(i,8,b);else if(i<8)set(i+1,8,b);else set(size-15+i,8,b);if(i<8)set(8,size-1-i,b);else if(i<9)set(8,15-i,b);else set(8,15-i-1,b);}if(version>=7){var vbits=getVersionBits(version);for(var i=0;i<18;i++){var b=((vbits>>i)&1)===1;set(size-11+i%3,Math.floor(i/3),b);set(Math.floor(i/3),size-11+i%3,b);}}return{size:size,grid:grid};}function getDataCapacity(v,ec){var table=[[0],[16,19,9,13],[28,34,16,22],[44,55,26,34],[64,80,36,48],[86,108,46,62],[108,136,60,76],[124,156,66,88],[154,194,86,110],[182,232,100,132],[216,274,122,154],[254,324,140,180],[290,370,158,206],[334,428,180,244],[365,461,197,261],[415,523,223,295],[453,589,253,325],[507,647,283,367],[563,721,313,397],[627,795,341,445],[669,861,385,485],[714,932,406,512],[782,1006,442,568],[860,1094,464,614],[914,1174,514,664],[1000,1276,538,718],[1062,1370,596,754],[1128,1468,628,808],[1193,1531,661,871],[1267,1631,701,911],[1373,1735,745,985],[1455,1843,793,1033],[1541,1955,845,1115],[1631,2071,901,1171],[1725,2191,961,1231],[1812,2306,986,1286],[1914,2434,1054,1354],[1992,2566,1096,1426],[2102,2702,1142,1502],[2216,2812,1222,1582]];return table[v]?Math.floor(table[v][ec]*0.9):100;}function getECWords(v,ec){if(v<=1)return[7,10,13,17][ec];if(v<=2)return[10,16,22,28][ec];if(v<=5)return[15,26,18,24][ec];return[18,30,20,28][ec];}function reedSolomon(data,ecLen){var gen=[1];for(var i=0;i<ecLen;i++){var ng=new Array(gen.length+1).fill(0);for(var j=0;j<gen.length;j++){ng[j]^=gen[j];ng[j+1]^=gfMul(gen[j],gfPow(2,i));}gen=ng;}var res=new Array(ecLen).fill(0);for(var i=0;i<data.length;i++){var f=res[0]^data[i];res.shift();res.push(0);for(var j=0;j<gen.length-1;j++)res[j]^=gfMul(f,gen[j+1]);}return res;}var GF_EXP=new Array(512),GF_LOG=new Array(256);(function(){var x=1;for(var i=0;i<255;i++){GF_EXP[i]=x;GF_LOG[x]=i;x<<=1;if(x>=256)x^=0x11d;}for(var i=255;i<512;i++)GF_EXP[i]=GF_EXP[i-255];})();function gfMul(a,b){if(a===0||b===0)return 0;return GF_EXP[GF_LOG[a]+GF_LOG[b]];}function gfPow(a,b){return GF_EXP[(GF_LOG[a]*b)%255];}function getFormatBits(ec,mask){var data=(ec<<3)|mask;var rem=data;for(var i=0;i<10;i++){rem=(rem<<1)^((rem>>9)*0x537);}return((data<<10)|rem)^0x5412;}function getVersionBits(v){var rem=v;for(var i=0;i<12;i++){rem=(rem<<1)^((rem>>11)*0x1F25);}return(v<<12)|rem;}return function(text){var qr=qrcodegen(text,0);var s=qr.size;var cell=8;var margin=cell*2;var total=s*cell+margin*2;var svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+total+'" height="'+total+'" viewBox="0 0 '+total+' '+total+'">';svg+='<rect width="'+total+'" height="'+total+'" fill="white"/>';for(var y=0;y<s;y++)for(var x=0;x<s;x++)if(qr.grid[y][x])svg+='<rect x="'+(x*cell+margin)+'" y="'+(y*cell+margin)+'" width="'+cell+'" height="'+cell+'" fill="black"/>';svg+='</svg>';return svg;};})();
+</script></head><body>
 <script>
 var items=${itemsJson};
-items.forEach(function(item,i){
+items.forEach(function(item){
   var label=document.createElement('div');label.className='label';
-  var qrDiv=document.createElement('div');qrDiv.className='qr';qrDiv.id='qr'+i;
+  var qrDiv=document.createElement('div');qrDiv.className='qr';
+  qrDiv.innerHTML=QrCode(item.qr);
   var info=document.createElement('div');info.className='info';
   info.innerHTML='<div class="name">'+item.name+'</div>'
     +'<div class="inv">'+item.inv+'</div>'
@@ -67,9 +71,8 @@ items.forEach(function(item,i){
     +'<div class="row"><b>Категорія:</b> '+item.category+'</div>';
   label.appendChild(qrDiv);label.appendChild(info);
   document.body.appendChild(label);
-  new QRCode(qrDiv,{text:item.qr,width:200,height:200,correctLevel:QRCode.CorrectLevel.H});
 });
-window.onload=function(){setTimeout(function(){window.print();},800);};
+window.onload=function(){setTimeout(function(){window.print();},500);};
 <\/script>
 </body></html>`;
   w.document.write(html);w.document.close();
