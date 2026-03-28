@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, createContext, useContext } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 // THEME & CONSTANTS
 const C = {
@@ -36,7 +37,7 @@ function printLabels(selectedItems,projects){
     const qrData=encodeURIComponent(item.qrCode||item.id);
     const qrUrl=`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${qrData}&ecc=H&format=svg`;
     return`<div class="label">
-<div class="qr"><img src="${qrUrl}" alt="QR"/></div>
+<div class="qr"><img src="${qrUrl}" alt="QR" crossorigin="anonymous"/></div>
 <div class="info">
 <div class="name">${item.name}</div>
 <div class="inv">${item.inventoryNumber||"—"}</div>
@@ -49,18 +50,27 @@ ${proj?.name?`<div class="project">${proj.name}</div>`:""}
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Етикетки</title>
 <style>
 @page{size:80mm 50mm landscape;margin:2mm;}
-*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif;}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Source Sans 3',Arial,sans-serif;}
+body{background:white;}
 .label{width:76mm;height:46mm;border:0.5pt solid #ccc;padding:2mm;page-break-after:always;display:flex;gap:3mm;align-items:center;}
 .label:last-child{page-break-after:auto;}
 .qr{flex:0 0 26mm;height:26mm;}
-.qr img{width:26mm;height:26mm;}
-.info{flex:1;overflow:hidden;}
-.name{font-size:9pt;font-weight:800;line-height:1.2;margin-bottom:1mm;}
-.row{font-size:7pt;color:#333;margin-bottom:0.5mm;}
+.qr img{width:26mm;height:26mm;display:block;}
+.info{flex:1;display:flex;flex-direction:column;justify-content:center;overflow:hidden;}
+.name{font-size:9pt;font-weight:800;line-height:1.2;margin-bottom:1mm;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.row{font-size:7pt;color:#333;margin-bottom:0.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .inv{font-size:8pt;font-weight:700;font-family:monospace;margin-bottom:1mm;}
 .project{font-size:7pt;font-weight:700;color:#2e75b6;margin-bottom:0.5mm;}
+@media print{body{margin:0;}}
 </style></head><body>${labels}
-<script>var imgs=document.querySelectorAll('.qr img');var n=0;function ck(){n++;if(n>=imgs.length)setTimeout(function(){window.print();},500);}if(!imgs.length)setTimeout(function(){window.print();},500);else imgs.forEach(function(i){if(i.complete)ck();else{i.onload=ck;i.onerror=ck;}});<\/script></body></html>`;
+<script>
+// Wait for all QR images to load before printing
+var imgs=document.querySelectorAll('.qr img');
+var loaded=0;
+function checkPrint(){loaded++;if(loaded>=imgs.length)setTimeout(function(){window.print();},300);}
+if(imgs.length===0){setTimeout(function(){window.print();},300);}
+else{imgs.forEach(function(img){if(img.complete)checkPrint();else{img.onload=checkPrint;img.onerror=checkPrint;}});}
+<\/script></body></html>`;
   w.document.write(html);w.document.close();
 }
 
@@ -158,10 +168,13 @@ function genInventorySheet(items,warehouses){
 // ═══════════════════════════════════════════════════════════════
 // SYNC ENGINE — Offline-first with IndexedDB + Supabase
 // ═══════════════════════════════════════════════════════════════
-// Config: set these in .env for production
-const SUPABASE_URL = "";  // Set in production: your Supabase project URL
-const SUPABASE_KEY = "";  // Set in production: your Supabase anon key
-const SYNC_ENABLED = !!(SUPABASE_URL && SUPABASE_KEY);
+// ═══════════════════════════════════════════════════════════════
+// SUPABASE CLIENT
+// ═══════════════════════════════════════════════════════════════
+const SUPABASE_URL = "https://howeqzxcreoetljzghd.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhvd2VxenhjeHJlb2V0bGp6Z2hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2NDQ4NjYsImV4cCI6MjA5MDIyMDg2Nn0.co7VdVEq9MhArcrJsSob3UUsY4EdxMcwisfDNikP6J4";
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const SYNC_ENABLED = true;
 
 // Lightweight IndexedDB wrapper — compatible API for offline storage
 // In production project, replace with full IndexedDB library
@@ -273,11 +286,8 @@ class SyncManager {
   }
 
   async _syncOne(entry){
-    // In production: actual Supabase upsert/insert/delete
-    // const { data, error } = await supabase.from(entry.table).upsert(entry.data);
-    // if (error) throw error;
-    // For demo: simulate network delay
-    await new Promise(r=>setTimeout(r,50));
+    const { data, error } = await supabase.from(entry.table).upsert(entry.data, { onConflict: 'id' });
+    if(error) throw error;
   }
 
   async _cleanSynced(){
@@ -290,34 +300,52 @@ class SyncManager {
   async initialSync(){
     if(!SYNC_ENABLED)return false;
     try{
-      // In production:
-      // const { data: items } = await supabase.from('items').select('*');
-      // await db.table('items').bulkPut(items);
-      // ... same for warehouses, projects, movements, settings
+      const [itemsRes, movementsRes, warehousesRes, projectsRes, settingsRes] = await Promise.all([
+        supabase.from('items').select('*').eq('is_deleted', false),
+        supabase.from('movements').select('*').order('date', { ascending: false }),
+        supabase.from('warehouses').select('*'),
+        supabase.from('projects').select('*'),
+        supabase.from('settings').select('*'),
+      ]);
+      const result = {
+        items: itemsRes.data || [],
+        movements: movementsRes.data || [],
+        warehouses: warehousesRes.data || [],
+        projects: projectsRes.data || [],
+        settings: settingsRes.data?.[0] || null,
+      };
+      // Cache locally
+      if(result.items.length) await this.db.table('items').bulkPut(result.items);
+      if(result.movements.length) await this.db.table('movements').bulkPut(result.movements);
+      if(result.warehouses.length) await this.db.table('warehouses').bulkPut(result.warehouses);
+      if(result.projects.length) await this.db.table('projects').bulkPut(result.projects);
       this.lastSync=new Date().toISOString();
       this._notify();
-      return true;
-    }catch(e){return false;}
+      return result;
+    }catch(e){console.error('Initial sync failed:',e);return false;}
   }
 
   // Subscribe to Supabase Realtime
   setupRealtime(onItemChange,onMovementChange){
     if(!SYNC_ENABLED)return;
-    // In production:
-    // this.realtimeChannel = supabase.channel('db-changes')
-    //   .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, payload => {
-    //     db.table('items').put(payload.new);
-    //     onItemChange(payload);
-    //   })
-    //   .on('postgres_changes', { event: '*', schema: 'public', table: 'movements' }, payload => {
-    //     db.table('movements').put(payload.new);
-    //     onMovementChange(payload);
-    //   })
-    //   .subscribe();
+    this.realtimeChannel = supabase.channel('db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, payload => {
+        if(payload.new) {
+          this.db.table('items').put(payload.new);
+          onItemChange(payload);
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'movements' }, payload => {
+        if(payload.new) {
+          this.db.table('movements').put(payload.new);
+          onMovementChange(payload);
+        }
+      })
+      .subscribe();
   }
 
   destroy(){
-    // In production: supabase.removeChannel(this.realtimeChannel);
+    if(this.realtimeChannel) supabase.removeChannel(this.realtimeChannel);
   }
 }
 
@@ -337,11 +365,6 @@ function useSyncStatus(){
 function useSyncedState(table,initialData){
   const [data,setData]=useState(initialData);
 
-  // Initialize local DB with demo data
-  useEffect(()=>{
-    db.table(table).bulkPut(initialData);
-  },[]);
-
   // Wrap setter to queue sync
   const setSynced=useCallback((updater)=>{
     setData(prev=>{
@@ -349,18 +372,22 @@ function useSyncedState(table,initialData){
       // Find changes
       const prevIds=new Set(prev.map(r=>r.id));
       const nextIds=new Set(next.map(r=>r.id));
+      // Determine type for mapping
+      const mapType=table==="items"?"item":table==="movements"?"movement":null;
       // New or updated
       next.forEach(r=>{
         const old=prev.find(o=>o.id===r.id);
         if(!old||JSON.stringify(old)!==JSON.stringify(r)){
           db.table(table).put(r);
-          syncManager.queueChange(table,"upsert",r);
+          const dbRow=mapType?mapAppToDb(r,mapType):r;
+          syncManager.queueChange(table,"upsert",dbRow);
         }
       });
       // Deleted
       prev.forEach(r=>{if(!nextIds.has(r.id)){
         db.table(table).put({...r,isDeleted:true});
-        syncManager.queueChange(table,"soft_delete",{id:r.id,isDeleted:true});
+        const dbRow=mapType?mapAppToDb({...r,isDeleted:true},mapType):{id:r.id,is_deleted:true};
+        syncManager.queueChange(table,"upsert",dbRow);
       }});
       return next;
     });
@@ -391,7 +418,65 @@ function SyncIndicator(){
   );
 }
 
-// DEMO DATA
+// ═══════════════════════════════════════════════════════════════
+// DB ↔ APP FIELD MAPPING (snake_case ↔ camelCase)
+// ═══════════════════════════════════════════════════════════════
+function mapDbToApp(row, type) {
+  if (!row) return row;
+  if (type === 'item') return {
+    id: row.id, name: row.name, category: row.category, unit: row.unit,
+    quantity: row.quantity, minQuantity: row.min_quantity, source: row.source,
+    warehouseId: row.warehouse_id, projectId: row.project_id,
+    inventoryNumber: row.inventory_number, expiryDate: row.expiry_date,
+    price: parseFloat(row.price) || 0, currency: row.currency, manufacturer: row.manufacturer,
+    batchNumber: row.batch_number, serialNumber: row.serial_number,
+    condition: row.condition, externalBarcode: row.external_barcode,
+    qrCode: row.qr_code, notes: row.notes, isDeleted: row.is_deleted,
+    createdAt: row.created_at, lastMovementAt: row.last_movement_at,
+  };
+  if (type === 'movement') return {
+    id: row.id, type: row.type, itemId: row.item_id, itemName: row.item_name || '',
+    quantity: row.quantity, fromWarehouseId: row.from_warehouse_id,
+    toWarehouseId: row.to_warehouse_id, date: row.date,
+    supplier: row.supplier, recipientName: row.recipient_name,
+    responsiblePerson: row.responsible_person, qualityCheck: row.quality_check,
+    reason: row.reason, actNumber: row.act_number, approvedBy: row.approved_by,
+    notes: row.notes, createdAt: row.created_at,
+  };
+  if (type === 'warehouse') return {
+    id: row.id, name: row.name, address: row.address, city: row.city, isActive: row.is_active,
+  };
+  if (type === 'project') return {
+    id: row.id, name: row.name, donor: row.donor_source, startDate: row.start_date,
+    endDate: row.end_date, isActive: row.is_active,
+  };
+  return row;
+}
+
+function mapAppToDb(obj, type) {
+  if (!obj) return obj;
+  if (type === 'item') return {
+    id: obj.id, name: obj.name, category: obj.category, unit: obj.unit,
+    quantity: obj.quantity, min_quantity: obj.minQuantity, source: obj.source,
+    warehouse_id: obj.warehouseId, project_id: obj.projectId || null,
+    inventory_number: obj.inventoryNumber, expiry_date: obj.expiryDate || '2099-12-31',
+    price: obj.price, currency: obj.currency, manufacturer: obj.manufacturer,
+    condition: obj.condition, external_barcode: obj.externalBarcode,
+    qr_code: obj.qrCode, notes: obj.notes, is_deleted: obj.isDeleted || false,
+    last_movement_at: obj.lastMovementAt,
+  };
+  if (type === 'movement') return {
+    id: obj.id, type: obj.type, item_id: obj.itemId, quantity: obj.quantity,
+    from_warehouse_id: obj.fromWarehouseId || null, to_warehouse_id: obj.toWarehouseId || null,
+    date: obj.date, supplier: obj.supplier, recipient_name: obj.recipientName,
+    responsible_person: obj.responsiblePerson, quality_check: obj.qualityCheck,
+    reason: obj.reason, act_number: obj.actNumber, approved_by: obj.approvedBy,
+    notes: obj.notes,
+  };
+  return obj;
+}
+
+// DEMO DATA (fallback when Supabase is empty)
 const DW=[
   {id:"wh1",name:"Офіс",address:"майдан Праці, 1",city:"Кривий Ріг",isActive:true},
   {id:"wh2",name:"Центральний склад",address:"вул. Вільної Іхерії, 4",city:"Кривий Ріг",isActive:true},
@@ -458,6 +543,7 @@ const I=({n,s:sz=20,c:cl="currentColor"})=>{const p={
   logout:<><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" stroke={cl} fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></>,
   box:<><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke={cl} fill="none" strokeWidth="1.5"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12" stroke={cl} fill="none" strokeWidth="1.5"/></>,
   wifi:<><path d="M5 12.55a11 11 0 0114.08 0M1.42 9a16 16 0 0121.16 0M8.53 16.11a6 6 0 016.95 0M12 20h.01" stroke={cl} fill="none" strokeWidth="1.5" strokeLinecap="round"/></>,
+  wifiOff:<><path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.58 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 016.95 0M12 20h.01" stroke={cl} fill="none" strokeWidth="1.5" strokeLinecap="round"/></>,
   qr:<><rect x="3" y="3" width="7" height="7" rx="1" stroke={cl} fill="none" strokeWidth="1.5"/><rect x="14" y="3" width="7" height="7" rx="1" stroke={cl} fill="none" strokeWidth="1.5"/><rect x="3" y="14" width="7" height="7" rx="1" stroke={cl} fill="none" strokeWidth="1.5"/><path d="M14 14h3v3h-3zM20 14v3h-3M20 20h-3v-3M17 20h3" stroke={cl} fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></>,
   camera:<><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" stroke={cl} fill="none" strokeWidth="1.5"/><circle cx="12" cy="13" r="4" stroke={cl} fill="none" strokeWidth="1.5"/></>,
   print:<><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" stroke={cl} fill="none" strokeWidth="1.5"/></>,
@@ -800,6 +886,7 @@ function WarehousePg({items,warehouses,projects,movements,settings,setItems,addM
   const [fCat,sFCat]=useState("");
   const [fWh,sFWh]=useState("");
   const [fSrc,sFSrc]=useState("");
+  const [stockFilter,setStockFilter]=useState("instock"); // "instock" | "all"
   const [selItem,setSelItem]=useState(null);
   const [editItem,setEditItem]=useState(null);
   const [showAdd,setShowAdd]=useState(false);
@@ -810,9 +897,10 @@ function WarehousePg({items,warehouses,projects,movements,settings,setItems,addM
 
   const fi=useMemo(()=>items.filter(i=>{
     if(i.isDeleted)return false;
+    if(stockFilter==="instock"&&i.quantity===0)return false;
     if(search){const s=search.toLowerCase();if(!i.name.toLowerCase().includes(s)&&!i.inventoryNumber?.toLowerCase().includes(s)&&!i.manufacturer?.toLowerCase().includes(s))return false;}
     if(fCat&&i.category!==fCat)return false;if(fWh&&i.warehouseId!==fWh)return false;if(fSrc&&i.source!==fSrc)return false;return true;
-  }),[items,search,fCat,fWh,fSrc]);
+  }),[items,search,fCat,fWh,fSrc,stockFilter]);
 
   const toggleCheck=(id)=>setChecked(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
   const toggleAll=()=>setChecked(p=>p.size===fi.length?new Set():new Set(fi.map(i=>i.id)));
@@ -859,7 +947,16 @@ function WarehousePg({items,warehouses,projects,movements,settings,setItems,addM
       {(fCat||fWh||fSrc)&&<button style={{...btn("ghost"),fontSize:12}} onClick={()=>{sFCat("");sFWh("");sFSrc("");}}>Скинути</button>}
     </div>}
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-      <span style={{fontSize:13,color:C.textDim}}>Показано: {fi.length} з {items.filter(i=>!i.isDeleted).length}</span>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        <span style={{fontSize:13,color:C.textDim}}>Показано: {fi.length} з {items.filter(i=>!i.isDeleted).length}</span>
+        <div style={{display:"flex",borderRadius:6,overflow:"hidden",border:`1px solid ${C.border}`}}>
+          {[{id:"instock",label:"В наявності"},{id:"all",label:"Всі"}].map(o=>(
+            <button key={o.id} onClick={()=>setStockFilter(o.id)} style={{padding:"4px 10px",fontSize:11,fontWeight:600,border:"none",cursor:"pointer",
+              background:stockFilter===o.id?C.accent:"transparent",color:stockFilter===o.id?"#fff":C.textDim,transition:"all 0.15s"}}>{o.label}</button>
+          ))}
+        </div>
+        {stockFilter==="all"&&items.filter(i=>!i.isDeleted&&i.quantity===0).length>0&&<span style={{fontSize:11,color:C.warning}}>({items.filter(i=>!i.isDeleted&&i.quantity===0).length} з нульовим залишком)</span>}
+      </div>
       {fi.length>0&&<label style={{fontSize:12,color:C.textDim,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
         <input type="checkbox" checked={checked.size===fi.length&&fi.length>0} onChange={toggleAll}/> Обрати всі
       </label>}
@@ -1286,7 +1383,25 @@ function AlertDr({open,onClose,items,settings,warehouses}){
 
 // Login
 function LoginPg({onLogin}){
-  const [role,sRole]=useState("admin");
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState("");
+
+  const handleLogin=async()=>{
+    setError("");setLoading(true);
+    try{
+      const {data,error:authErr}=await supabase.auth.signInWithPassword({email,password});
+      if(authErr)throw authErr;
+      const user=data.user;
+      const role=user.app_metadata?.role||user.user_metadata?.role||"field";
+      const name=user.user_metadata?.name||user.email.split("@")[0];
+      onLogin({id:user.id,email:user.email,role,name});
+    }catch(e){
+      setError(e.message==="Invalid login credentials"?"Невірний email або пароль":e.message||"Помилка входу");
+    }finally{setLoading(false);}
+  };
+
   return(<div style={{fontFamily:"'Source Sans 3',system-ui,sans-serif",background:C.bg,color:C.text,display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh"}}>
     <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
     <div style={{width:"100%",maxWidth:380,padding:32}}>
@@ -1295,14 +1410,12 @@ function LoginPg({onLogin}){
         <div style={{fontSize:13,color:C.textDim,lineHeight:1.5}}>БО «100% Життя»<br/>Дніпровський регіон</div>
       </div>
       <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:16,padding:24}}>
-        <div style={{marginBottom:16}}><label style={lbl}>Email</label><input style={inp} value="admin@100life-dniproregion.org.ua" readOnly/></div>
-        <div style={{marginBottom:16}}><label style={lbl}>Пароль</label><input style={inp} type="password" value="demo" readOnly/></div>
-        <div style={{marginBottom:20}}><label style={lbl}>Роль (demo)</label>
-          <select style={sel} value={role} onChange={e=>sRole(e.target.value)}><option value="admin">Admin — повний доступ</option><option value="logistics">Logistics — розширений</option><option value="field">Field — базовий</option></select>
-        </div>
-        <button style={{...btn("primary"),width:"100%",justifyContent:"center",padding:12,fontSize:15}} onClick={()=>onLogin({email:"demo",role,name:role==="admin"?"Адміністратор":role==="logistics"?"Логіст":"Польовий працівник"})}>Увійти</button>
+        <div style={{marginBottom:16}}><label style={lbl}>Email</label><input style={inp} type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="your@email.com" onKeyDown={e=>e.key==="Enter"&&handleLogin()} autoFocus/></div>
+        <div style={{marginBottom:20}}><label style={lbl}>Пароль</label><input style={inp} type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" onKeyDown={e=>e.key==="Enter"&&handleLogin()}/></div>
+        {error&&<div style={{color:C.danger,fontSize:13,marginBottom:12,padding:10,background:`${C.danger}11`,borderRadius:8}}>{error}</div>}
+        <button style={{...btn("primary"),width:"100%",justifyContent:"center",padding:12,fontSize:15,opacity:loading?0.7:1}} onClick={handleLogin} disabled={loading||!email||!password}>{loading?"Вхід...":"Увійти"}</button>
       </div>
-      <div style={{textAlign:"center",marginTop:16,fontSize:12,color:C.textMuted}}>Демо · Дані в пам'яті</div>
+      <div style={{textAlign:"center",marginTop:16,fontSize:12,color:C.textMuted}}>Supabase Auth · Захищене з'єднання</div>
     </div>
   </div>);
 }
@@ -1310,11 +1423,13 @@ function LoginPg({onLogin}){
 // MAIN APP
 export default function App(){
   const [user,setUser]=useState(null);
+  const [authLoading,setAuthLoading]=useState(true);
+  const [dataLoading,setDataLoading]=useState(false);
   const [page,setPage]=useState("warehouse");
-  const [items,setItems]=useSyncedState("items",DI);
-  const [movements,setMovements]=useSyncedState("movements",DM);
-  const [warehouses]=useState(DW);
-  const [projects]=useState(DP);
+  const [items,setItems]=useSyncedState("items",[]);
+  const [movements,setMovements]=useSyncedState("movements",[]);
+  const [warehouses,setWarehouses]=useState([]);
+  const [projects,setProjects]=useState([]);
   const [settings,setSettings]=useState({organizationName:"БО «100% Життя» Дніпровський регіон",criticalExpiryDays:30,warningExpiryDays:90,deadStockDays:180});
   const [showAlerts,setShowAlerts]=useState(false);
   const [showQrScanner,setShowQrScanner]=useState(false);
@@ -1323,18 +1438,65 @@ export default function App(){
 
   useEffect(()=>{const h=()=>setIsMobile(window.innerWidth<=768);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
 
+  // Restore Supabase auth session on mount
+  useEffect(()=>{
+    supabase.auth.getSession().then(({data:{session}})=>{
+      if(session?.user){
+        const u=session.user;
+        const role=u.app_metadata?.role||u.user_metadata?.role||"field";
+        const name=u.user_metadata?.name||u.email.split("@")[0];
+        setUser({id:u.id,email:u.email,role,name});
+      }
+      setAuthLoading(false);
+    });
+    const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{
+      if(!session){setUser(null);return;}
+      const u=session.user;
+      const role=u.app_metadata?.role||u.user_metadata?.role||"field";
+      const name=u.user_metadata?.name||u.email.split("@")[0];
+      setUser({id:u.id,email:u.email,role,name});
+    });
+    return()=>subscription.unsubscribe();
+  },[]);
+
+  // Load data from Supabase when user logs in
+  useEffect(()=>{
+    if(!user)return;
+    setDataLoading(true);
+    syncManager.initialSync().then(result=>{
+      if(result && typeof result === 'object'){
+        const loadedItems = result.items?.length ? result.items.map(r=>mapDbToApp(r,'item')) : [];
+        if(loadedItems.length) setItems(loadedItems);
+        if(result.movements?.length){
+          // Enrich movements with itemName from items
+          const itemMap = new Map(loadedItems.map(i=>[i.id,i.name]));
+          setMovements(result.movements.map(r=>{const m=mapDbToApp(r,'movement');m.itemName=m.itemName||itemMap.get(m.itemId)||'';return m;}));
+        }
+        if(result.warehouses?.length) setWarehouses(result.warehouses.map(r=>mapDbToApp(r,'warehouse')));
+        if(result.projects?.length) setProjects(result.projects.map(r=>mapDbToApp(r,'project')));
+        if(result.settings){
+          const s=result.settings;
+          setSettings(prev=>({...prev,
+            organizationName:s.organization_name||prev.organizationName,
+            criticalExpiryDays:s.critical_expiry_days??prev.criticalExpiryDays,
+            warningExpiryDays:s.warning_expiry_days??prev.warningExpiryDays,
+            deadStockDays:s.dead_stock_days??prev.deadStockDays,
+          }));
+        }
+      }
+      setDataLoading(false);
+    }).catch(()=>setDataLoading(false));
+  },[user]);
+
   // Setup Supabase Realtime subscriptions
   useEffect(()=>{
+    if(!user)return;
     syncManager.setupRealtime(
-      (payload)=>{/* item changed on another device */
-        if(payload?.new)setItems(p=>{const idx=p.findIndex(i=>i.id===payload.new.id);if(idx>=0){const c=[...p];c[idx]=payload.new;return c;}return[...p,payload.new];});},
-      (payload)=>{/* movement added on another device */
-        if(payload?.new)setMovements(p=>{if(p.find(m=>m.id===payload.new.id))return p;return[...p,payload.new];});}
+      (payload)=>{if(payload?.new)setItems(p=>{const mapped=mapDbToApp(payload.new,'item');const idx=p.findIndex(i=>i.id===mapped.id);if(idx>=0){const c=[...p];c[idx]=mapped;return c;}return[...p,mapped];});},
+      (payload)=>{if(payload?.new)setMovements(p=>{const mapped=mapDbToApp(payload.new,'movement');if(p.find(m=>m.id===mapped.id))return p;return[...p,mapped];});}
     );
-    // Initial sync attempt
-    syncManager.initialSync();
     return()=>syncManager.destroy();
-  },[]);
+  },[user]);
   const alertCount=useMemo(()=>items.filter(i=>!i.isDeleted).reduce((c,i)=>c+getAlerts(i,settings).length,0),[items,settings]);
   const addMove=(m)=>setMovements(p=>[...p,m]);
 
@@ -1364,7 +1526,19 @@ export default function App(){
     setQrResultItem(null);
   };
 
+  if(authLoading)return(<div style={{fontFamily:"'Source Sans 3',system-ui,sans-serif",background:C.bg,color:C.text,display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh"}}>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
+    <div style={{textAlign:"center"}}><div style={{fontSize:42,fontWeight:900,background:`linear-gradient(135deg, ${C.accent}, ${C.accentLight})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:8}}>WMS</div><div style={{color:C.textDim,fontSize:14}}>Завантаження...</div></div>
+  </div>);
+
   if(!user)return <LoginPg onLogin={setUser}/>;
+
+  if(dataLoading)return(<div style={{fontFamily:"'Source Sans 3',system-ui,sans-serif",background:C.bg,color:C.text,display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh"}}>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
+    <div style={{textAlign:"center"}}><div style={{fontSize:28,fontWeight:800,color:C.accent,marginBottom:8}}>WMS</div><div style={{color:C.textDim,fontSize:14}}>Синхронізація даних...</div></div>
+  </div>);
+
+  const handleLogout=async()=>{await supabase.auth.signOut();setUser(null);};
 
   const canAccess=pg=>pg==="warehouse"||pg==="movements"||user.role==="admin"||user.role==="logistics";
   const navItems=[{id:"warehouse",label:"Склад",icon:"warehouse"},{id:"movements",label:"Операції",icon:"movements"},{id:"inventory",label:"Інвент.",icon:"clipboard"},{id:"analytics",label:"Аналітика",icon:"analytics"},{id:"reports",label:"Звіти",icon:"reports"},{id:"settings",label:"Налашт.",icon:"settings"}].filter(n=>canAccess(n.id));
@@ -1436,7 +1610,7 @@ export default function App(){
         <div style={{padding:"8px 12px",borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}>
           <div style={{width:32,height:32,borderRadius:8,background:C.accentDim,display:"flex",alignItems:"center",justifyContent:"center"}}><I n="user" s={16} c={C.accentLight}/></div>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.name}</div><div style={{fontSize:11,color:C.textDim}}>{user.role}</div></div>
-          <button onClick={()=>setUser(null)} style={{background:"none",border:"none",cursor:"pointer",padding:4}} title="Вийти"><I n="logout" s={16} c={C.textDim}/></button>
+          <button onClick={handleLogout} style={{background:"none",border:"none",cursor:"pointer",padding:4}} title="Вийти"><I n="logout" s={16} c={C.textDim}/></button>
         </div>
         <SyncIndicator/>
       </div>
