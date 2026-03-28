@@ -36,7 +36,7 @@ function printLabels(selectedItems,projects){
     const qrData=encodeURIComponent(item.qrCode||item.id);
     const qrUrl=`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${qrData}&ecc=H&format=svg`;
     return`<div class="label">
-<div class="qr"><img src="${qrUrl}" alt="QR" crossorigin="anonymous"/></div>
+<div class="qr"><img src="${qrUrl}" alt="QR"/></div>
 <div class="info">
 <div class="name">${item.name}</div>
 <div class="inv">${item.inventoryNumber||"—"}</div>
@@ -49,27 +49,18 @@ ${proj?.name?`<div class="project">${proj.name}</div>`:""}
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Етикетки</title>
 <style>
 @page{size:80mm 50mm landscape;margin:2mm;}
-*{margin:0;padding:0;box-sizing:border-box;font-family:'Source Sans 3',Arial,sans-serif;}
-body{background:white;}
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif;}
 .label{width:76mm;height:46mm;border:0.5pt solid #ccc;padding:2mm;page-break-after:always;display:flex;gap:3mm;align-items:center;}
 .label:last-child{page-break-after:auto;}
 .qr{flex:0 0 26mm;height:26mm;}
-.qr img{width:26mm;height:26mm;display:block;}
-.info{flex:1;display:flex;flex-direction:column;justify-content:center;overflow:hidden;}
-.name{font-size:9pt;font-weight:800;line-height:1.2;margin-bottom:1mm;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
-.row{font-size:7pt;color:#333;margin-bottom:0.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.qr img{width:26mm;height:26mm;}
+.info{flex:1;overflow:hidden;}
+.name{font-size:9pt;font-weight:800;line-height:1.2;margin-bottom:1mm;}
+.row{font-size:7pt;color:#333;margin-bottom:0.5mm;}
 .inv{font-size:8pt;font-weight:700;font-family:monospace;margin-bottom:1mm;}
 .project{font-size:7pt;font-weight:700;color:#2e75b6;margin-bottom:0.5mm;}
-@media print{body{margin:0;}}
 </style></head><body>${labels}
-<script>
-// Wait for all QR images to load before printing
-var imgs=document.querySelectorAll('.qr img');
-var loaded=0;
-function checkPrint(){loaded++;if(loaded>=imgs.length)setTimeout(function(){window.print();},300);}
-if(imgs.length===0){setTimeout(function(){window.print();},300);}
-else{imgs.forEach(function(img){if(img.complete)checkPrint();else{img.onload=checkPrint;img.onerror=checkPrint;}});}
-<\/script></body></html>`;
+<script>var imgs=document.querySelectorAll('.qr img');var n=0;function ck(){n++;if(n>=imgs.length)setTimeout(function(){window.print();},500);}if(!imgs.length)setTimeout(function(){window.print();},500);else imgs.forEach(function(i){if(i.complete)ck();else{i.onload=ck;i.onerror=ck;}});<\/script></body></html>`;
   w.document.write(html);w.document.close();
 }
 
