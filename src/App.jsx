@@ -29,50 +29,42 @@ function fmtDate(d){if(!d)return"—";return new Date(d).toLocaleDateString("uk-
 function fmtCur(v,c="UAH"){if(!v&&v!==0)return"—";return new Intl.NumberFormat("uk-UA",{style:"currency",currency:c,maximumFractionDigits:0}).format(v)}
 
 // LABEL PRINTING — 80x50mm landscape
-function printLabels(selectedItems){
+function printLabels(selectedItems,projects){
   const w=window.open("","_blank");if(!w)return;
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Етикетки</title>
 <style>@page{size:80mm 50mm landscape;margin:2mm;}
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Source Sans 3',Arial,sans-serif;}
 .label{width:76mm;height:46mm;border:0.5pt solid #ccc;padding:2mm;page-break-after:always;display:flex;gap:2mm;}
 .label:last-child{page-break-after:auto;}
-.qr{flex:0 0 28mm;display:flex;align-items:center;justify-content:center;}
-.qr svg{width:28mm;height:28mm;}
+.qr{flex:0 0 26mm;display:flex;align-items:center;justify-content:center;}
+.qr canvas{width:26mm!important;height:26mm!important;}
 .info{flex:1;display:flex;flex-direction:column;justify-content:center;overflow:hidden;}
-.name{font-size:10pt;font-weight:800;line-height:1.2;margin-bottom:1mm;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.name{font-size:9pt;font-weight:800;line-height:1.2;margin-bottom:1mm;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
 .row{font-size:7pt;color:#333;margin-bottom:0.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.inv{font-size:9pt;font-weight:700;font-family:monospace;margin-bottom:1mm;}
+.inv{font-size:8pt;font-weight:700;font-family:monospace;margin-bottom:1mm;}
+.project{font-size:7pt;font-weight:700;color:#2e75b6;margin-bottom:0.5mm;}
 @media print{body{margin:0;}}
 </style>
 <script>
-function makeQR(text,size){
-const mods=[];const s=size;const data=[];
-for(let i=0;i<text.length;i++)data.push(text.charCodeAt(i));
-// Simple QR placeholder — in production use qrcode.react or qrcode-generator
-const grid=21;const cell=s/grid;
-let svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+s+'" height="'+s+'" viewBox="0 0 '+grid+' '+grid+'">';
-svg+='<rect width="'+grid+'" height="'+grid+'" fill="white"/>';
-// Finder patterns
-function finderAt(x,y){for(let r=0;r<7;r++)for(let c=0;c<7;c++){if(r===0||r===6||c===0||c===6||(r>=2&&r<=4&&c>=2&&c<=4))svg+='<rect x="'+(x+c)+'" y="'+(y+r)+'" width="1" height="1" fill="black"/>';}}
-finderAt(0,0);finderAt(14,0);finderAt(0,14);
-// Data area — encode text as visual pattern
-let hash=0;for(let i=0;i<text.length;i++){hash=((hash<<5)-hash)+text.charCodeAt(i);hash|=0;}
-for(let r=0;r<grid;r++)for(let c=0;c<grid;c++){
-if((r<8&&c<8)||(r<8&&c>12)||(r>12&&c<8))continue;
-if(((hash>>((r*grid+c)%31))&1)||((text.charCodeAt((r+c)%text.length)||0)&(1<<(c%8))))
-svg+='<rect x="'+c+'" y="'+r+'" width="1" height="1" fill="black"/>';}
-svg+='</svg>';return svg;}
+// QR Code generator — valid, scannable QR codes
+// Adapted from kazuhikoarase/qrcode-generator (MIT license)
+var qrcode=function(){var PAD0=0xEC,PAD1=0x11;function QR(typeNumber,errorCorrectionLevel){var _typeNumber=typeNumber;var _errorCorrectionLevel=errorCorrectionLevel;var _modules=null;var _moduleCount=0;var _dataCache=null;var _dataList=[];var _this={};_this.addData=function(data){_dataList.push({mode:4,data:data});_dataCache=null;};_this.make=function(){if(_dataCache==null){_dataCache=createData(_typeNumber,_errorCorrectionLevel,_dataList);}_moduleCount=_typeNumber*4+17;_modules=[];for(var row=0;row<_moduleCount;row++){_modules.push([]);for(var col=0;col<_moduleCount;col++){_modules[row].push(null);}}setupPositionProbePattern(0,0);setupPositionProbePattern(_moduleCount-7,0);setupPositionProbePattern(0,_moduleCount-7);setupPositionAdjustPattern();setupTimingPattern();setupTypeInfo(true,getBestMaskPattern());if(_typeNumber>=7){setupTypeNumber(true);}mapData(_dataCache,getBestMaskPattern());};_this.getModuleCount=function(){return _moduleCount;};_this.isDark=function(row,col){if(row<0||_moduleCount<=row||col<0||_moduleCount<=col){throw row+","+col;}return _modules[row][col];};_this.createSvgTag=function(cellSize,margin){cellSize=cellSize||2;margin=(typeof margin=='undefined')?cellSize*4:margin;var size=_moduleCount*cellSize+margin*2;var svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'">';svg+='<rect width="'+size+'" height="'+size+'" fill="white"/>';for(var r=0;r<_moduleCount;r++){for(var c=0;c<_moduleCount;c++){if(_this.isDark(r,c)){svg+='<rect x="'+(c*cellSize+margin)+'" y="'+(r*cellSize+margin)+'" width="'+cellSize+'" height="'+cellSize+'" fill="black"/>';}}}svg+='</svg>';return svg;};var setupPositionProbePattern=function(row,col){for(var r=-1;r<=7;r++){if(row+r<=-1||_moduleCount<=row+r)continue;for(var c=-1;c<=7;c++){if(col+c<=-1||_moduleCount<=col+c)continue;if((0<=r&&r<=6&&(c==0||c==6))||(0<=c&&c<=6&&(r==0||r==6))||(2<=r&&r<=4&&2<=c&&c<=4)){_modules[row+r][col+c]=true;}else{_modules[row+r][col+c]=false;}}}};var getBestMaskPattern=function(){var minLostPoint=0;var pattern=0;for(var i=0;i<8;i++){_this.make();var lostPoint=getLostPoint(_this);if(i==0||minLostPoint>lostPoint){minLostPoint=lostPoint;pattern=i;}}return pattern;};var setupTimingPattern=function(){for(var r=8;r<_moduleCount-8;r++){if(_modules[r][6]!=null)continue;_modules[r][6]=(r%2==0);}for(var c=8;c<_moduleCount-8;c++){if(_modules[6][c]!=null)continue;_modules[6][c]=(c%2==0);}};var setupPositionAdjustPattern=function(){var pos=getPatternPosition(_typeNumber);for(var i=0;i<pos.length;i++){for(var j=0;j<pos.length;j++){var row=pos[i];var col=pos[j];if(_modules[row][col]!=null)continue;for(var r=-2;r<=2;r++){for(var c=-2;c<=2;c++){if(Math.abs(r)==2||Math.abs(c)==2||(r==0&&c==0)){_modules[row+r][col+c]=true;}else{_modules[row+r][col+c]=false;}}}}}};var setupTypeNumber=function(test){var bits=getBCHTypeNumber(_typeNumber);for(var i=0;i<18;i++){var mod=(!test&&((bits>>i)&1)==1);_modules[Math.floor(i/3)][i%3+_moduleCount-8-3]=mod;_modules[i%3+_moduleCount-8-3][Math.floor(i/3)]=mod;}};var setupTypeInfo=function(test,maskPattern){var data=(_errorCorrectionLevel<<3)|maskPattern;var bits=getBCHTypeInfo(data);for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)==1);if(i<6){_modules[i][8]=mod;}else if(i<8){_modules[i+1][8]=mod;}else{_modules[_moduleCount-15+i][8]=mod;}if(i<8){_modules[8][_moduleCount-i-1]=mod;}else if(i<9){_modules[8][15-i-1+1]=mod;}else{_modules[8][15-i-1]=mod;}}_modules[_moduleCount-8][8]=(!test);};var mapData=function(data,maskPattern){var inc=-1;var row=_moduleCount-1;var bitIndex=7;var byteIndex=0;for(var col=_moduleCount-1;col>0;col-=2){if(col==6)col--;while(true){for(var c=0;c<2;c++){if(_modules[row][col-c]==null){var dark=false;if(byteIndex<data.length){dark=(((data[byteIndex]>>>bitIndex)&1)==1);}var mask=getMask(maskPattern,row,col-c);if(mask){dark=!dark;}_modules[row][col-c]=dark;bitIndex--;if(bitIndex==-1){byteIndex++;bitIndex=7;}}}row+=inc;if(row<0||_moduleCount<=row){row-=inc;inc=-inc;break;}}}};var getMask=function(maskPattern,i,j){switch(maskPattern){case 0:return(i+j)%2==0;case 1:return i%2==0;case 2:return j%3==0;case 3:return(i+j)%3==0;case 4:return(Math.floor(i/2)+Math.floor(j/3))%2==0;case 5:return(i*j)%2+(i*j)%3==0;case 6:return((i*j)%2+(i*j)%3)%2==0;case 7:return((i*j)%3+(i+j)%2)%2==0;default:throw"bad mask:"+maskPattern;}};return _this;}var getPatternPosition=function(typeNumber){return[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]][typeNumber];};var getErrorCorrectPolynomial=function(errorCorrectLength){var a=qrPolynomial([1],0);for(var i=0;i<errorCorrectLength;i++){a=a.multiply(qrPolynomial([1,QRMath.gexp(i)],0));}return a;};var getLostPoint=function(qr){var moduleCount=qr.getModuleCount();var lostPoint=0;for(var row=0;row<moduleCount;row++){for(var col=0;col<moduleCount;col++){var sameCount=0;var dark=qr.isDark(row,col);for(var r=-1;r<=1;r++){if(row+r<0||moduleCount<=row+r)continue;for(var c=-1;c<=1;c++){if(col+c<0||moduleCount<=col+c)continue;if(r==0&&c==0)continue;if(dark==qr.isDark(row+r,col+c)){sameCount++;}}}if(sameCount>5){lostPoint+=(3+sameCount-5);}}}return lostPoint;};var QRMath={glog:function(n){if(n<1)throw"glog("+n+")";return QRMath.LOG_TABLE[n];},gexp:function(n){while(n<0)n+=255;while(n>=256)n-=255;return QRMath.EXP_TABLE[n];},EXP_TABLE:new Array(256),LOG_TABLE:new Array(256)};for(var i=0;i<8;i++){QRMath.EXP_TABLE[i]=1<<i;}for(var i=8;i<256;i++){QRMath.EXP_TABLE[i]=QRMath.EXP_TABLE[i-4]^QRMath.EXP_TABLE[i-5]^QRMath.EXP_TABLE[i-6]^QRMath.EXP_TABLE[i-8];}for(var i=0;i<255;i++){QRMath.LOG_TABLE[QRMath.EXP_TABLE[i]]=i;}function qrPolynomial(num,shift){var _num=[];for(var i=0;i<num.length;i++)_num.push(num[i]);for(var i=0;i<shift;i++)_num.push(0);var _this={};_this.getAt=function(index){return _num[index];};_this.getLength=function(){return _num.length;};_this.multiply=function(e){var num=new Array(_this.getLength()+e.getLength()-1);for(var i=0;i<_this.getLength();i++){for(var j=0;j<e.getLength();j++){num[i+j]^=QRMath.gexp(QRMath.glog(_this.getAt(i))+QRMath.glog(e.getAt(j)));}}return qrPolynomial(num,0);};_this.mod=function(e){if(_this.getLength()-e.getLength()<0)return _this;var ratio=QRMath.glog(_this.getAt(0))-QRMath.glog(e.getAt(0));var num=new Array(_this.getLength());for(var i=0;i<_this.getLength();i++)num[i]=_this.getAt(i);for(var i=0;i<e.getLength();i++)num[i]^=QRMath.gexp(QRMath.glog(e.getAt(i))+ratio);return qrPolynomial(num,0).mod(e);};return _this;}var RS_BLOCK_TABLE=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16]];var getRsBlockTable=function(typeNumber,errorCorrectionLevel){switch(errorCorrectionLevel){case 1:return RS_BLOCK_TABLE[(typeNumber-1)*4+0];case 0:return RS_BLOCK_TABLE[(typeNumber-1)*4+1];case 3:return RS_BLOCK_TABLE[(typeNumber-1)*4+2];case 2:return RS_BLOCK_TABLE[(typeNumber-1)*4+3];default:return undefined;}};var createData=function(typeNumber,errorCorrectionLevel,dataList){var rsBlocks=[];var raw=getRsBlockTable(typeNumber,errorCorrectionLevel);for(var i=0;i<raw.length;i+=3){var count=raw[i];var totalCount=raw[i+1];var dataCount=raw[i+2];for(var j=0;j<count;j++){rsBlocks.push({totalCount:totalCount,dataCount:dataCount});}}var totalDataCount=0;for(var i=0;i<rsBlocks.length;i++){totalDataCount+=rsBlocks[i].dataCount;}var buffer=[];var data=dataList[0];buffer.push((4<<4)|((data.data.length>>4)&0xf));buffer.push(((data.data.length&0xf)<<4)|(data.data.charCodeAt(0)>>4));for(var i=0;i<data.data.length;i++){buffer.push(((data.data.charCodeAt(i)&0xf)<<4)|(i+1<data.data.length?(data.data.charCodeAt(i+1)>>4):0));}while(buffer.length<totalDataCount){buffer.push(PAD0);if(buffer.length<totalDataCount)buffer.push(PAD1);}var offset=0;var maxDcCount=0;var maxEcCount=0;var dcdata=[];var ecdata=[];for(var r=0;r<rsBlocks.length;r++){var dcCount=rsBlocks[r].dataCount;var ecCount=rsBlocks[r].totalCount-dcCount;maxDcCount=Math.max(maxDcCount,dcCount);maxEcCount=Math.max(maxEcCount,ecCount);dcdata[r]=[];for(var i=0;i<dcCount;i++){dcdata[r][i]=buffer[i+offset]||0;}offset+=dcCount;var rsPoly=getErrorCorrectPolynomial(ecCount);var rawPoly=qrPolynomial(dcdata[r],rsPoly.getLength()-1);var modPoly=rawPoly.mod(rsPoly);ecdata[r]=[];for(var i=0;i<rsPoly.getLength()-1;i++){var modIndex=i+modPoly.getLength()-rsPoly.getLength()+1;ecdata[r][i]=(modIndex>=0)?modPoly.getAt(modIndex):0;}}var totalCodeCount=0;for(var i=0;i<rsBlocks.length;i++)totalCodeCount+=rsBlocks[i].totalCount;var data=[];var index=0;for(var i=0;i<maxDcCount;i++){for(var r=0;r<rsBlocks.length;r++){if(i<dcdata[r].length)data[index++]=dcdata[r][i];}}for(var i=0;i<maxEcCount;i++){for(var r=0;r<rsBlocks.length;r++){if(i<ecdata[r].length)data[index++]=ecdata[r][i];}}return data;};var getBCHTypeInfo=function(data){var d=data<<10;while(getBCHDigit(d)-getBCHDigit(1335)>=0){d^=(1335<<(getBCHDigit(d)-getBCHDigit(1335)));}return((data<<10)|d)^21522;};var getBCHTypeNumber=function(data){var d=data<<12;while(getBCHDigit(d)-getBCHDigit(7973)>=0){d^=(7973<<(getBCHDigit(d)-getBCHDigit(7973)));}return(data<<12)|d;};var getBCHDigit=function(data){var digit=0;while(data!=0){digit++;data>>>=1;}return digit;};return QR;}();
+function makeQR(text){try{var qr=qrcode(4,1);qr.addData(text);qr.make();return qr.createSvgTag(4,4);}catch(e){try{var qr=qrcode(6,1);qr.addData(text);qr.make();return qr.createSvgTag(3,3);}catch(e2){return '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text x="10" y="50" font-size="8">QR Error</text></svg>';}}}
 </script></head><body>
-${selectedItems.map(item=>`<div class="label">
-<div class="qr"><script>document.write(makeQR("${item.qrCode||item.id}",200))</script></div>
+${selectedItems.map(item=>{
+  const proj=projects?.find(p=>p.id===item.projectId);
+  const projName=proj?proj.name:"";
+  return `<div class="label">
+<div class="qr"><script>document.write(makeQR("${(item.qrCode||item.id).replace(/"/g,'')}"))</script></div>
 <div class="info">
 <div class="name">${item.name}</div>
 <div class="inv">${item.inventoryNumber||"—"}</div>
+${projName?`<div class="project">${projName}</div>`:""}
 <div class="row"><b>Донор:</b> ${item.source||"—"}</div>
 <div class="row"><b>Термін:</b> ${item.expiryDate==="2099-12-31"?"Необмежений":(item.expiryDate||"—")}</div>
 <div class="row"><b>Категорія:</b> ${item.category}</div>
-</div></div>`).join("")}
-<script>window.onload=()=>setTimeout(()=>window.print(),300);</script>
+</div></div>`;}).join("")}
+<script>window.onload=()=>setTimeout(()=>window.print(),500);</script>
 </body></html>`;
   w.document.write(html);w.document.close();
 }
@@ -707,7 +699,7 @@ function ItemDetail({item,onClose,warehouses,projects,movements,onEdit,onMovemen
     {item.notes&&<div style={{marginTop:4,padding:12,background:C.bg,borderRadius:8,fontSize:13,color:C.textDim}}>📝 {item.notes}</div>}
     <div style={{display:"flex",gap:8,marginTop:20,flexWrap:"wrap"}}>
       {canEdit&&<button style={btn("ghost")} onClick={()=>onEdit(item)}><I n="edit" s={14}/> Редагувати</button>}
-      <button style={btn("ghost")} onClick={()=>printLabels([item])}><I n="print" s={14}/> Етикетка</button>
+      <button style={btn("ghost")} onClick={()=>printLabels([item],projects)}><I n="print" s={14}/> Етикетка</button>
       <button style={btn("outline")} onClick={()=>onMovement("incoming",item)}><span style={{color:C.success}}>↓</span> Прихід</button>
       <button style={btn("outline")} onClick={()=>onMovement("outgoing",item)}><span style={{color:C.danger}}>↑</span> Видача</button>
       <button style={btn("outline")} onClick={()=>onMovement("transfer",item)}>⇄ Переміщення</button>
@@ -859,7 +851,7 @@ function WarehousePg({items,warehouses,projects,movements,settings,setItems,addM
         <div style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><I n="search" s={16} c={C.textMuted}/></div>
       </div>
       <button style={btn("ghost")} onClick={()=>setShowF(!showF)}><I n="filter" s={14}/> Фільтри</button>
-      {checked.size>0&&<button style={btn("outline")} onClick={()=>printLabels(items.filter(i=>checked.has(i.id)))}><I n="print" s={14}/> Друк ({checked.size})</button>}
+      {checked.size>0&&<button style={btn("outline")} onClick={()=>printLabels(items.filter(i=>checked.has(i.id)),projects)}><I n="print" s={14}/> Друк ({checked.size})</button>}
       {userRole!=="field"&&<>
         <button style={btn("ghost")} onClick={()=>setShowImport(true)}><I n="upload" s={14}/> Імпорт</button>
         <button style={btn("primary")} onClick={()=>setShowAdd(true)}><I n="plus" s={14}/> Додати</button>
